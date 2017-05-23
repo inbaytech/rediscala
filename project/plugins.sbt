@@ -18,7 +18,7 @@ resolvers += Resolver.url(
   url("http://dl.bintray.com/content/sbt/sbt-plugin-releases"))(
     Resolver.ivyStylePatterns)
 
-addSbtPlugin("org.xerial.sbt" % "sbt-sonatype" % "1.0")
+addSbtPlugin("org.xerial.sbt" % "sbt-sonatype" % "2.0.0-M1")
 
 addSbtPlugin("com.jsuereth" % "sbt-pgp" % "1.0.0")
 
