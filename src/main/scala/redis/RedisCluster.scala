@@ -25,13 +25,16 @@ case class RedisCluster(redisServers: Seq[RedisServer],
 
   val log = Logging.getLogger(_system, this)
 
+  val clusterSlotsRef:Ref[Option[Map[ClusterSlot, RedisConnection]]] = Ref(Option.empty[Map[ClusterSlot, RedisConnection]])
+  val lockClusterSlots = Ref(true)
+
   override val redisServerConnections = {
     redisServers.map { server =>
       makeRedisConnection(server, defaultActive = true)
     } toMap
   }
   refreshConnections()
-
+  Await.result(asyncRefreshClusterSlots(force=true), Duration(10,TimeUnit.SECONDS))
 
   def equalsHostPort(clusterNode:ClusterNode,server:RedisServer) = {
     clusterNode.host == server.host &&  clusterNode.port == server.port
@@ -42,7 +45,7 @@ case class RedisCluster(redisServers: Seq[RedisServer],
       if (active.single.compareAndSet(!status, status)) {
         refreshConnections()
       }
-      
+
       clusterSlotsRef.single.get.map { clusterSlots =>
         if (clusterSlots.keys.exists( cs => equalsHostPort(cs.master,server) )){
           log.info("one master is still dead => refresh clusterSlots")
@@ -52,10 +55,6 @@ case class RedisCluster(redisServers: Seq[RedisServer],
 
     }
   }
-
-  val clusterSlotsRef:Ref[Option[Map[ClusterSlot, RedisConnection]]] = Ref(Option.empty[Map[ClusterSlot, RedisConnection]])
-  val lockClusterSlots = Ref(true)
-  Await.result(asyncRefreshClusterSlots(force=true), Duration(10,TimeUnit.SECONDS))
 
   def getClusterSlots(): Future[Map[ClusterSlot, RedisConnection]] = {
 
