@@ -2,13 +2,16 @@ package redis
 
 import java.net.InetSocketAddress
 
-import akka.actor.{Props, ActorRef, ActorSystem}
+import akka.actor.{ActorRef, ActorSystem, Props}
 
 import scala.concurrent.stm._
 import redis.actors.RedisClientActor
-import scala.concurrent.{Future, ExecutionContext}
+
+import scala.concurrent.{ExecutionContext, Future}
 import redis.protocol.RedisReply
 import redis.commands.Transactions
+
+import scala.concurrent.duration._
 
 case class RedisServer(host: String = "localhost",
                        port: Int = 6379,
@@ -24,6 +27,7 @@ abstract class RedisClientPoolLike(system: ActorSystem, redisDispatcher: RedisDi
 
   val name: String
   implicit val executionContext = system.dispatchers.lookup(redisDispatcher.name)
+  val connectTimeout: FiniteDuration = 1 seconds
 
   private val redisConnectionRef: Ref[Seq[ActorRef]] = Ref(Seq.empty)
   /**
@@ -86,13 +90,13 @@ abstract class RedisClientPoolLike(system: ActorSystem, redisDispatcher: RedisDi
     }
   }
 
-  def makeRedisConnection(server: RedisServer, defaultActive: Boolean = false) = {
+  def makeRedisConnection(server: RedisServer, config: RedisServerConfig, defaultActive: Boolean = false) = {
     val active = Ref(defaultActive)
-    (server, RedisConnection(makeRedisClientActor(server, active), active))
+    (server, RedisConnection(makeRedisClientActor(server, config, active), active))
   }
 
-  def makeRedisClientActor(server: RedisServer, active: Ref[Boolean]): ActorRef = {
-    system.actorOf(RedisClientActor.props(new InetSocketAddress(server.host, server.port),
+  def makeRedisClientActor(server: RedisServer, config: RedisServerConfig, active: Ref[Boolean]): ActorRef = {
+    system.actorOf(RedisClientActor.props(server, config,
       getConnectOperations(server), onConnectStatus(server, active), redisDispatcher.name)
       .withDispatcher(redisDispatcher.name),
       name + '-' + Redis.tempName()
@@ -101,22 +105,22 @@ abstract class RedisClientPoolLike(system: ActorSystem, redisDispatcher: RedisDi
 
 }
 
-case class RedisClientMutablePool(redisServers: Seq[RedisServer],
+case class RedisClientMutablePool(config: RedisConfiguration,
                                   name: String = "RedisClientPool")
                                  (implicit system: ActorSystem,
                                   redisDispatcher: RedisDispatcher = Redis.dispatcher
                                   ) extends RedisClientPoolLike (system, redisDispatcher) with RoundRobinPoolRequest with RedisCommands {
 
   override val redisServerConnections = {
-    val m = redisServers map { server => makeRedisConnection(server) }
+    val m = config.topology.nodes map { server => makeRedisConnection(server, config.config) }
     collection.mutable.Map(m: _*)
   }
 
-  def addServer(server: RedisServer) {
+  def addServer(server: RedisServer, config: RedisServerConfig) {
     if (!redisServerConnections.contains(server)) {
       redisServerConnections.synchronized {
         if (!redisServerConnections.contains(server)) {
-          redisServerConnections += makeRedisConnection(server)
+          redisServerConnections += makeRedisConnection(server, config)
         }
       }
     }
@@ -137,7 +141,7 @@ case class RedisClientMutablePool(redisServers: Seq[RedisServer],
 
 }
 
-case class RedisClientPool(redisServers: Seq[RedisServer],
+case class RedisClientPool(redisServers: Seq[RedisServer], config: RedisServerConfig,
                            name: String = "RedisClientPool")
                           (implicit _system: ActorSystem,
                            redisDispatcher: RedisDispatcher = Redis.dispatcher
@@ -145,7 +149,7 @@ case class RedisClientPool(redisServers: Seq[RedisServer],
 
   override val redisServerConnections = {
     redisServers.map { server =>
-      makeRedisConnection(server, defaultActive = true)
+      makeRedisConnection(server, config, defaultActive = true)
     } toMap
   }
 
@@ -154,15 +158,15 @@ case class RedisClientPool(redisServers: Seq[RedisServer],
 }
 
 case class RedisClientMasterSlaves(master: RedisServer,
-                                   slaves: Seq[RedisServer])
+                                   slaves: Seq[RedisServer], config: RedisServerConfig)
                                   (implicit _system: ActorSystem,
                                   redisDispatcher: RedisDispatcher = Redis.dispatcher)
                                   extends RedisCommands with Transactions {
   implicit val executionContext = _system.dispatchers.lookup(redisDispatcher.name)
 
-  val masterClient = RedisClient(master.host, master.port, master.password, master.db)
+  val masterClient = RedisClient(master)
 
-  val slavesClients = RedisClientPool(slaves)
+  val slavesClients = RedisClientPool(slaves, config)
 
   override def send[T](redisCommand: RedisCommand[_ <: RedisReply, T]): Future[T] = {
     if (redisCommand.isMasterOnly || slaves.isEmpty) {
@@ -176,29 +180,28 @@ case class RedisClientMasterSlaves(master: RedisServer,
 }
 
 
-case class SentinelMonitoredRedisClientMasterSlaves(
-    sentinels: Seq[(String, Int)] = Seq(("localhost", 26379)), master: String)
-    (implicit _system: ActorSystem, redisDispatcher: RedisDispatcher = Redis.dispatcher)
-  extends SentinelMonitored(_system, redisDispatcher) with ActorRequest with RedisCommands with Transactions {
+case class SentinelMonitoredRedisClientMasterSlaves(config: RedisConfiguration, master: String)
+    (implicit _system: ActorSystem, redisDispatcher: RedisDispatcher)
+  extends SentinelMonitored(config, _system, redisDispatcher) with ActorRequest with RedisCommands with Transactions {
 
   val masterClient: RedisClient = withMasterAddr(
     (ip, port) => {
-      new RedisClient(ip, port, name = "SMRedisClient")
+      new RedisClient(RedisServer(ip, port), RedisServerConfig.default, name = "SMRedisClient")
     })
 
   val slavesClients: RedisClientMutablePool = withSlavesAddr(
     slavesHostPort => {
       val slaves = slavesHostPort.map {
         case (ip, port) =>
-          new RedisServer(ip, port)
+          RedisServer(ip, port)
       }
-      new RedisClientMutablePool(slaves, name = "SMRedisClient")
+      RedisClientMutablePool(config, name = "SMRedisClient")
     })
 
 
   val onNewSlave = (ip: String, port: Int) => {
     log.info(s"onNewSlave $ip:$port")
-    slavesClients.addServer(RedisServer(ip, port))
+    slavesClients.addServer(RedisServer(ip, port), RedisServerConfig.default)
   }
 
   val onSlaveDown = (ip: String, port: Int) => {
@@ -229,4 +232,9 @@ case class SentinelMonitoredRedisClientMasterSlaves(
       slavesClients.send(redisCommand)
     }
   }
+}
+
+object SentinelMonitoredRedisClientMasterSlaves {
+  def apply(master: String)(implicit _system: ActorSystem, redisDispatcher: RedisDispatcher = Redis.dispatcher): SentinelMonitoredRedisClientMasterSlaves =
+    SentinelMonitoredRedisClientMasterSlaves(RedisConfiguration(Seq[RedisServer](RedisServer("localhost", 26379))), master)
 }

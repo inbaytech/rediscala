@@ -97,6 +97,10 @@ abstract class RedisWorkerIO(val address: InetSocketAddress, onConnectStatus: Bo
     case c: CommandFailed => onConnectedCommandFailed(c)
   }
 
+  def abort(): Unit = {
+    tcpWorker ! Abort
+  }
+
   def onAddressChanged(addr: InetSocketAddress) {
     log.info(s"Address change [old=$address, new=$addr]")
     tcpWorker ! ConfirmedClose // close the sending direction of the connection (TCP FIN)
@@ -105,7 +109,7 @@ abstract class RedisWorkerIO(val address: InetSocketAddress, onConnectStatus: Bo
   }
 
   def onConnectionClosed(c: ConnectionClosed) = {
-    log.warning(s"ConnectionClosed $c")
+    log.warning(s"Connection to $currAddress closed, reason = ${c.getErrorCause}")
     scheduleReconnect()
   }
 
@@ -177,7 +181,7 @@ abstract class RedisWorkerIO(val address: InetSocketAddress, onConnectStatus: Bo
 
   import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
-  def reconnectDuration: FiniteDuration = 2 seconds
+  def reconnectDuration: FiniteDuration = 1 seconds
 
   private def writeWorker(byteString: ByteString) {
     onWriteSent()

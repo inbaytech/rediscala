@@ -17,7 +17,7 @@ class RedisClusterTest extends RedisClusterClients {
   var redisCluster:RedisCluster = null
   override def setup(): Unit = {
     super.setup()
-    redisCluster = RedisCluster(nodePorts.map(p=>RedisServer("127.0.0.1",p)))
+    redisCluster = RedisCluster(RedisClientConfig(Right(nodePorts.map(p=>RedisServer("127.0.0.1",p))), None))
   }
 
   sequential

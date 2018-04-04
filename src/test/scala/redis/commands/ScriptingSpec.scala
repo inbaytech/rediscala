@@ -70,8 +70,9 @@ class ScriptingSpec(implicit ee: ExecutionEnv) extends RedisStandaloneServer {
     "SCRIPT KILL" in {
 
       withRedisServer(serverPort => {
-        val redisKiller = RedisClient(port = serverPort)
-        val redisScriptLauncher = RedisClient(port = serverPort)
+        val config = RedisClientConfig(Left(RedisServer("localhost", serverPort)), None)
+        val redisKiller = RedisClient(config)
+        val redisScriptLauncher = RedisClient(config)
         Await.result(redisKiller.scriptKill(), timeOut) must throwA(ReplyErrorException("NOTBUSY No scripts in execution right now."))
 
         // infinite script (5 seconds)

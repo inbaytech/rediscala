@@ -1,19 +1,38 @@
 package redis.actors
 
-import akka.actor.Actor
+import java.io.IOException
+
+import akka.actor.{Actor, ActorRef, Props}
+
 import scala.collection.mutable
-import redis.protocol.{FullyDecoded, DecodeResult, RedisProtocolReply, RedisReply}
+import redis.protocol.{DecodeResult, FullyDecoded, RedisProtocolReply, RedisReply}
 import akka.util.ByteString
 import akka.event.Logging
+
 import scala.annotation.tailrec
-import redis.Operation
+import redis.{Operation, RedisServerConfig}
 
-class RedisReplyDecoder() extends Actor {
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 
+case object Tick
+case object Timeout
+
+class RedisReplyDecoder(xmitter: ActorRef, config: RedisServerConfig) extends Actor {
 
   val queuePromises = mutable.Queue[Operation[_,_]]()
 
   val log = Logging(context.system, this)
+
+  val timer = config.responseTimeout.map(t => context.system.scheduler.schedule(t, t, self, Tick))
+
+  private def onTick() = {
+    queuePromises.headOption.foreach { op =>
+      if (System.nanoTime - op.timestamp > config.responseTimeout.get.toNanos) {
+        xmitter ! Timeout
+      }
+    }
+  }
 
   override def postStop() {
     queuePromises.foreach(op => {
@@ -26,6 +45,7 @@ class RedisReplyDecoder() extends Actor {
       queuePromises ++= promises.queue
     }
     case byteStringInput: ByteString => decodeReplies(byteStringInput)
+    case Tick => onTick()
   }
 
   var partiallyDecoded: DecodeResult[Unit] = DecodeResult.unit
@@ -105,6 +125,10 @@ trait DecodeReplies {
   }
 
   def onDecodedReply(reply: RedisReply)
+}
+
+object RedisReplyDecoder {
+  def props(xmitter: ActorRef, config: RedisServerConfig): Props = Props(new RedisReplyDecoder(xmitter, config))
 }
 
 case class QueuePromises(queue: mutable.Queue[Operation[_, _]])

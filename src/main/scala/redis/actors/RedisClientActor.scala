@@ -5,23 +5,26 @@ import java.net.InetSocketAddress
 import akka.actor.SupervisorStrategy.Stop
 import akka.actor._
 import akka.util.{ByteString, ByteStringBuilder}
-import redis.{Operation, Transaction}
+import redis.{Operation, RedisServer, RedisServerConfig, Transaction}
 
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
 
 object RedisClientActor {
 
-  def props( address: InetSocketAddress, getConnectOperations: () => Seq[Operation[_, _]],
-             onConnectStatus: Boolean => Unit,
-             dispatcherName: String,
-             connectTimeout: Option[FiniteDuration] = None) =
-    Props(new RedisClientActor(address, getConnectOperations, onConnectStatus, dispatcherName, connectTimeout))
+  def props(
+    server: RedisServer,
+    config: RedisServerConfig,
+    getConnectOperations: () => Seq[Operation[_, _]],
+    onConnectStatus: Boolean => Unit,
+    dispatcherName: String
+    ) =
+    Props(new RedisClientActor(server, config, getConnectOperations, onConnectStatus, dispatcherName))
 }
 
-class RedisClientActor(override val address: InetSocketAddress, getConnectOperations: () =>
-  Seq[Operation[_, _]], onConnectStatus: Boolean => Unit, dispatcherName: String, connectTimeout: Option[FiniteDuration] = None) extends RedisWorkerIO(address, onConnectStatus, connectTimeout) {
-
+class RedisClientActor(server: RedisServer, config: RedisServerConfig, getConnectOperations: () =>
+  Seq[Operation[_, _]], onConnectStatus: Boolean => Unit, dispatcherName: String, connectTimeout: Option[FiniteDuration] = None) extends
+  RedisWorkerIO(new InetSocketAddress(server.host, server.port), onConnectStatus, config.connectTimeout) {
 
   import context._
 
@@ -30,8 +33,7 @@ class RedisClientActor(override val address: InetSocketAddress, getConnectOperat
   // connection closed on the sending direction
   var oldRepliesDecoder: Option[ActorRef] = None
 
-  def initRepliesDecoder() =
-    context.actorOf(Props(classOf[RedisReplyDecoder]).withDispatcher(dispatcherName))
+  def initRepliesDecoder() = context.actorOf(RedisReplyDecoder.props(self, config).withDispatcher(dispatcherName))
 
   var queuePromises = mutable.Queue[Operation[_, _]]()
 
@@ -50,6 +52,7 @@ class RedisClientActor(override val address: InetSocketAddress, getConnectOperat
     case Terminated(actorRef) =>
       log.warning(s"Terminated($actorRef)")
     case KillOldRepliesDecoder => killOldRepliesDecoder()
+    case Timeout => abort()
   }
 
   def onDataReceived(dataByteString: ByteString) {

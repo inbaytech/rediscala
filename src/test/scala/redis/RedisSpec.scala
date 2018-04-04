@@ -86,7 +86,8 @@ abstract class RedisStandaloneServer extends RedisHelper {
   val server = redisManager.newRedisProcess()
 
   val port = server.port
-  lazy val redis = RedisClient(port = port)
+  lazy val config = RedisClientConfig(Left(RedisServer("localhost", server.port)), None)
+  lazy val redis = RedisClient(config)
 
   def redisVersion(): Future[Option[RedisVersion]] = redis.info("Server").map { info =>
     info.split("\r\n").drop(1).flatMap { line =>
@@ -132,12 +133,15 @@ abstract class RedisSentinelClients(val masterName: String = "mymaster") extends
 
   val sentinelPorts = Seq(sentinelPort1, sentinelPort2)
 
-  lazy val redisClient = RedisClient(port = masterPort)
-  lazy val sentinelClient = SentinelClient(port = sentinelPort1)
-  lazy val sentinelMonitoredRedisClient =
-    SentinelMonitoredRedisClient(master = masterName,
-      sentinels = Seq((redisHost, sentinelPort1), (redisHost, sentinelPort2)))
+  lazy val config = RedisClientConfig(Left(RedisServer("localhost", masterPort)), None)
+  lazy val redis = RedisClient(config)
 
+  lazy val redisClient = RedisClient(RedisClientConfig(Left(RedisServer("localhost", masterPort)), None))
+  lazy val sentinelClient = SentinelClient(RedisClientConfig(Left(RedisServer("localhost", sentinelPort1)), None))
+  lazy val sentinelMonitoredRedisClient =
+    SentinelMonitoredRedisClient(RedisClientConfig(Right(Seq[RedisServer](RedisServer(redisHost, sentinelPort1), RedisServer(redisHost, sentinelPort2))), None),
+      masterName
+    )
 
   val redisManager = new RedisManager()
 

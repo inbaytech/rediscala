@@ -120,7 +120,8 @@ class ServerSpec extends RedisStandaloneServer {
 
     "SHUTDOWN (with modifier)" in {
       withRedisServer(port => {
-        val redis = RedisClient(port = port)
+        val config = RedisClientConfig(Left(RedisServer("localhost", port)), None)
+        val redis = RedisClient(config)
         Await.result(redis.shutdown(NOSAVE), timeOut) must throwA(InvalidRedisReply)
       })
     }
