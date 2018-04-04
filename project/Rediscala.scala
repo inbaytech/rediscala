@@ -50,7 +50,7 @@ object RediscalaBuild extends Build {
   lazy val standardSettings = Defaults.defaultSettings ++
     Seq(
       name := "rediscala",
-      organization := "com.github.etaty",
+      organization := "com.inbaytech",
       scalaVersion := "2.11.8",
       crossScalaVersions := Seq(scalaVersion.value, "2.12.0"),
       licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0.html")),

@@ -3,11 +3,14 @@ package redis
 import akka.actor._
 import akka.util.Helpers
 import redis.commands._
+
 import scala.concurrent._
 import java.net.InetSocketAddress
-import redis.actors.{RedisSubscriberActorWithCallback, RedisClientActor}
+
+import redis.actors.{RedisClientActor, RedisSubscriberActorWithCallback}
 import redis.api.pubsub._
 import java.util.concurrent.atomic.AtomicLong
+
 import akka.event.Logging
 
 import scala.concurrent.duration.FiniteDuration
@@ -27,16 +30,51 @@ trait RedisCommands
   with Clusters
   with Geo
 
-abstract class RedisClientActorLike(system: ActorSystem, redisDispatcher: RedisDispatcher, connectTimeout: Option[FiniteDuration] = None) extends ActorRequest {
-  var host: String
-  var port: Int
-  val name: String
+case class RedisTopology(
+  redis   : Either[RedisServer, Seq[RedisServer]]
+) {
+  def server = redis.left.get
+  def nodes = redis.right.get
+}
+
+object RedisTopology {
+  def apply(host: String, port: Int): RedisTopology = RedisTopology(Left(RedisServer(host, port, None, None)))
+  def apply(server: RedisServer): RedisTopology = RedisTopology(Left(server))
+  def apply(servers: Seq[RedisServer]): RedisTopology = RedisTopology(Right(servers))
+}
+
+case class RedisServerConfig(
+  connectTimeout  : Option[FiniteDuration],
+  responseTimeout : Option[FiniteDuration]
+) {
+}
+
+object RedisServerConfig {
+  def default: RedisServerConfig = RedisServerConfig(None, None)
+  def apply(connectTimeout: FiniteDuration, responseTimeout: FiniteDuration): RedisServerConfig = RedisServerConfig(Some(connectTimeout), Some(responseTimeout))
+}
+
+case class RedisConfiguration(
+  topology: RedisTopology,
+  config: RedisServerConfig
+) {
+}
+
+object RedisConfiguration {
+  def apply(host: String, port: Int): RedisConfiguration = RedisConfiguration(RedisTopology(host, port), RedisServerConfig(None, None))
+  def apply(server: RedisServer): RedisConfiguration = RedisConfiguration(RedisTopology(server), RedisServerConfig(None, None))
+  def apply(servers: Seq[RedisServer]): RedisConfiguration = RedisConfiguration(RedisTopology(servers), RedisServerConfig(None, None))
+}
+
+abstract class RedisClientActorLike(server: RedisServer, config: RedisServerConfig, name: String, system: ActorSystem, redisDispatcher: RedisDispatcher) extends ActorRequest {
+  var host = server.host
+  var port = server.port
   val password: Option[String] = None
   val db: Option[Int] = None
   implicit val executionContext = system.dispatchers.lookup(redisDispatcher.name)
 
-  val redisConnection: ActorRef = system.actorOf(RedisClientActor.props(new InetSocketAddress(host, port),
-    getConnectOperations, onConnectStatus, redisDispatcher.name, connectTimeout)
+  val redisConnection: ActorRef = system.actorOf(RedisClientActor.props(server, config,
+    getConnectOperations, onConnectStatus, redisDispatcher.name)
       .withDispatcher(redisDispatcher.name),
     name + '-' + Redis.tempName()
   )
@@ -75,27 +113,40 @@ abstract class RedisClientActorLike(system: ActorSystem, redisDispatcher: RedisD
   }
 }
 
-case class RedisClient(var host: String = "localhost",
-                       var port: Int = 6379,
-                       override val password: Option[String] = None,
-                       override val db: Option[Int] = None,
-                       name: String = "RedisClient",
-                       connectTimeout: Option[FiniteDuration] = None)
+case class RedisClient(server: RedisServer, config: RedisServerConfig, name: String = "RedisClient")
                       (implicit _system: ActorSystem,
                        redisDispatcher: RedisDispatcher = Redis.dispatcher
-                      ) extends RedisClientActorLike(_system, redisDispatcher, connectTimeout) with RedisCommands with Transactions {
+                      ) extends RedisClientActorLike(server, config, name, _system,redisDispatcher) with RedisCommands with Transactions {
 
 }
 
-case class RedisBlockingClient(var host: String = "localhost",
-                               var port: Int = 6379,
-                               override val password: Option[String] = None,
-                               override val db: Option[Int] = None,
-                               name: String = "RedisBlockingClient",
-                               connectTimeout: Option[FiniteDuration] = None)
+object RedisClient {
+  def apply()(implicit _system: ActorSystem): RedisClient = RedisClient(
+    RedisServer("localhost", 6379), RedisServerConfig.default
+  )
+
+  def apply(server: RedisServer)(implicit _system: ActorSystem): RedisClient = RedisClient(
+    server, RedisServerConfig.default
+  )
+
+  def apply(config: RedisServerConfig)(implicit _system: ActorSystem): RedisClient = RedisClient(
+    RedisServer("localhost", 6379), config
+  )
+}
+
+case class RedisBlockingClient(server: RedisServer, config: RedisServerConfig, name: String)
                               (implicit _system: ActorSystem,
                                redisDispatcher: RedisDispatcher = Redis.dispatcher
-                              ) extends RedisClientActorLike(_system, redisDispatcher, connectTimeout) with BLists {
+                              ) extends RedisClientActorLike(server, config, name, _system, redisDispatcher) with BLists {
+}
+
+object RedisBlockingClient {
+  def apply()(implicit _system: ActorSystem): RedisBlockingClient = {
+    RedisBlockingClient(RedisServer("localhost", 6379), RedisServerConfig.default, "RedisBlockingClient")
+  }
+  def apply(config: RedisServerConfig)(implicit _system: ActorSystem): RedisBlockingClient = {
+    RedisBlockingClient(RedisServer("localhost", 6379), config, "RedisBlockingClient")
+  }
 }
 
 case class RedisPubSub(
@@ -145,33 +196,33 @@ case class RedisPubSub(
   }
 }
 
-case class SentinelMonitoredRedisClient( sentinels: Seq[(String, Int)] = Seq(("localhost", 26379)),
+case class SentinelMonitoredRedisClient( config: RedisConfiguration,
                                          master: String,
                                          password: Option[String] = None,
                                          db: Option[Int] = None,
                                          name: String = "SMRedisClient")
                                        (implicit system: ActorSystem,
                                         redisDispatcher: RedisDispatcher = Redis.dispatcher
-                                        ) extends SentinelMonitoredRedisClientLike(system, redisDispatcher) with RedisCommands with Transactions {
+                                        ) extends SentinelMonitoredRedisClientLike(config, system, redisDispatcher) with RedisCommands with Transactions {
 
   val redisClient: RedisClient = withMasterAddr((ip, port) => {
-    new RedisClient(ip, port, password, db, name)
+    new RedisClient(RedisServer(ip, port, password, db), RedisServerConfig.default, name)
   })
   override val onNewSlave  =  (ip: String, port: Int) => {}
   override val onSlaveDown =  (ip: String, port: Int) => {}
 }
 
 
-case class SentinelMonitoredRedisBlockingClient( sentinels: Seq[(String, Int)] = Seq(("localhost", 26379)),
+case class SentinelMonitoredRedisBlockingClient( config: RedisConfiguration,
                                                  master: String,
                                                  password: Option[String] = None,
                                                  db: Option[Int] = None,
                                                  name: String = "SMRedisBlockingClient")
                                                (implicit system: ActorSystem,
                                                 redisDispatcher: RedisDispatcher = Redis.dispatcher
-                                                ) extends SentinelMonitoredRedisClientLike(system, redisDispatcher) with BLists {
+                                                ) extends SentinelMonitoredRedisClientLike(config, system, redisDispatcher) with BLists {
   val redisClient: RedisBlockingClient = withMasterAddr((ip, port) => {
-    new RedisBlockingClient(ip, port, password, db, name)
+    RedisBlockingClient(RedisServer(ip, port, password, db), RedisServerConfig.default, name)
   })
   override val onNewSlave =  (ip: String, port: Int) => {}
   override val onSlaveDown =  (ip: String, port: Int) => {}

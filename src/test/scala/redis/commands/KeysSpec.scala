@@ -107,7 +107,8 @@ class KeysSpec extends RedisStandaloneServer {
       import scala.concurrent.duration._
 
       withRedisServer(port => {
-        val redisMigrate = RedisClient("localhost", port)
+        val config = RedisClientConfig(Left(RedisServer("localhost", port)), None)
+        val redisMigrate = RedisClient(config)
         val key = "migrateKey-" + System.currentTimeMillis()
         val r = for {
           _ <- redis.set(key, "value")
@@ -122,7 +123,7 @@ class KeysSpec extends RedisStandaloneServer {
     }
 
     "MOVE" in {
-      val redisMove = RedisClient(port=port)
+      val redisMove = RedisClient(config)
       val r = for {
         _ <- redis.set("moveKey", "value")
         _ <- redisMove.select(1)
@@ -297,7 +298,8 @@ class KeysSpec extends RedisStandaloneServer {
     "SCAN" in {
 
       withRedisServer(port => {
-        val scanRedis = RedisClient("localhost", port)
+        val config = RedisClientConfig(Left(RedisServer("localhost", port)), None)
+        val scanRedis = RedisClient(config)
 
         val r = for {
           _ <- scanRedis.flushdb()

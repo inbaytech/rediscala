@@ -2,10 +2,11 @@ package redis
 
 import java.util.concurrent.{ThreadLocalRandom, TimeUnit}
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.{Actor, ActorRef, ActorSystem, DiagnosticActorLogging, Props}
 import akka.event.Logging
 import akka.util.ByteString
 import redis.api.clusters.{ClusterNode, ClusterSlot}
+import redis.api.connection.Ping
 import redis.commands.Transactions
 import redis.protocol.RedisReply
 import redis.util.CRC16
@@ -17,8 +18,7 @@ import scala.concurrent.{Await, Future, Promise}
 import scala.util.control.NonFatal
 
 
-case class RedisCluster(redisServers: Seq[RedisServer],
-                           name: String = "RedisClientPool")
+case class RedisCluster(config: RedisConfiguration, name: String = "RedisCluster")
                           (implicit _system: ActorSystem,
                            redisDispatcher: RedisDispatcher = Redis.dispatcher
                           ) extends RedisClientPoolLike(_system, redisDispatcher)  with RedisCommands {
@@ -29,10 +29,11 @@ case class RedisCluster(redisServers: Seq[RedisServer],
   val lockClusterSlots = Ref(true)
 
   override val redisServerConnections = {
-    redisServers.map { server =>
-      makeRedisConnection(server, defaultActive = true)
+    config.topology.nodes.map { server =>
+      makeRedisConnection(server, config.config, defaultActive = true)
     } toMap
   }
+  //gamma ray_system.actorOf(RedisClusterMonitor.props(this))
   refreshConnections()
   Await.result(asyncRefreshClusterSlots(force=true), Duration(10,TimeUnit.SECONDS))
 
@@ -42,8 +43,11 @@ case class RedisCluster(redisServers: Seq[RedisServer],
 
   override def onConnectStatus(server: RedisServer, active: Ref[Boolean]): (Boolean) => Unit = {
     (status: Boolean) => {
+      log.debug(s"REDIS CONNECT STATUS ${server.host}:${server.port} ${active.single.get} -> $status")
       if (active.single.compareAndSet(!status, status)) {
+        log.debug(s"REDIS CONNECT STATUS CHANGED for ${server.host}:${server.port}")
         refreshConnections()
+        //_system.eventStream.publish(ServerConnectionStatus(server, status))
       }
 
       clusterSlotsRef.single.get.map { clusterSlots =>
@@ -52,7 +56,6 @@ case class RedisCluster(redisServers: Seq[RedisServer],
           asyncRefreshClusterSlots()
         }
       }
-
     }
   }
 
@@ -131,7 +134,7 @@ case class RedisCluster(redisServers: Seq[RedisServer],
 
     val maybeRedisActor:Option[ActorRef]  = getRedisActor(redisCommand)
 
-    maybeRedisActor.map{ redisConnection =>
+    maybeRedisActor.map { redisConnection =>
       send(redisConnection,redisCommand).recoverWith {
         case e: redis.actors.ReplyErrorException if e.message.startsWith("MOVED")||e.message.startsWith("ASK") =>
           e.message match {

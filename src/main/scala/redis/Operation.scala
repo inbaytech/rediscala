@@ -4,7 +4,8 @@ import scala.concurrent.Promise
 import redis.protocol.{DecodeResult, RedisReply}
 import akka.util.ByteString
 
-case class Operation[RedisReplyT <: RedisReply, T](redisCommand: RedisCommand[RedisReplyT, T], promise: Promise[T]) {
+case class Operation[RedisReplyT <: RedisReply, T](redisCommand: RedisCommand[RedisReplyT, T], promise: Promise[T], timestamp: Long = System.nanoTime()) {
+
   def decodeRedisReplyThenComplete(bs: ByteString): DecodeResult[Unit] = {
     val r = redisCommand.decodeRedisReply.apply(bs)
     r.foreach { reply =>
