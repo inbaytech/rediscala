@@ -11,8 +11,6 @@ import redis.actors.{RedisClientActor, RedisSubscriberActorWithCallback}
 import redis.api.pubsub._
 import java.util.concurrent.atomic.AtomicLong
 
-import akka.event.Logging
-
 import scala.concurrent.duration.FiniteDuration
 
 trait RedisCommands

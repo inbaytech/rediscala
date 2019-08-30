@@ -153,7 +153,10 @@ case class Setbit[K](key: K, offset: Long, value: Boolean)(implicit redisKey: By
 
 case class Setex[K, V](key: K, seconds: Long, value: V)(implicit redisKey: ByteStringSerializer[K], convert: ByteStringSerializer[V]) extends SimpleClusterKey[K] with RedisCommandStatusBoolean {
   val isMasterOnly = true
+  println(s"message:JLM.setex value = $value")
+  println(s"message:JLM.setex serializer = ${convert.getClass.getSimpleName}")
   val encodedRequest: ByteString = encode("SETEX", Seq(keyAsString, ByteString(seconds.toString), convert.serialize(value)))
+  println(s"message:JLM.setex encoded = $encodedRequest")
 }
 
 case class Setnx[K, V](key: K, value: V)(implicit redisKey: ByteStringSerializer[K], convert: ByteStringSerializer[V]) extends SimpleClusterKey[K] with RedisCommandIntegerBoolean {

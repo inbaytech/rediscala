@@ -1,8 +1,6 @@
 package redis
 
-import java.net.InetSocketAddress
-
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem}
 
 import scala.concurrent.stm._
 import redis.actors.RedisClientActor
@@ -191,7 +189,7 @@ case class SentinelMonitoredRedisClientMasterSlaves(config: RedisConfiguration, 
 
   val slavesClients: RedisClientMutablePool = withSlavesAddr(
     slavesHostPort => {
-      val slaves = slavesHostPort.map {
+      slavesHostPort.map {
         case (ip, port) =>
           RedisServer(ip, port)
       }

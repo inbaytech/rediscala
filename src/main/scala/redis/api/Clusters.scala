@@ -4,9 +4,6 @@ import akka.util.ByteString
 import redis.RedisCommand
 import redis.protocol.{DecodeResult, Bulk, MultiBulk, RedisProtocolReply, RedisReply}
 
-
-
-
 case class ClusterNode(host:String, port:Int, id:String)
 case class ClusterSlot(begin:Int, end:Int, master:ClusterNode, slaves:Seq[ClusterNode])  extends Comparable[ClusterSlot] {
   override def compareTo(x: ClusterSlot): Int = {

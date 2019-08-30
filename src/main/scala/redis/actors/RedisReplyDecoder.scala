@@ -1,7 +1,5 @@
 package redis.actors
 
-import java.io.IOException
-
 import akka.actor.{Actor, ActorRef, Props}
 
 import scala.collection.mutable
@@ -12,7 +10,6 @@ import akka.event.Logging
 import scala.annotation.tailrec
 import redis.{Operation, RedisServerConfig}
 
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 case object Tick

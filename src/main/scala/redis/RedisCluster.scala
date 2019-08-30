@@ -2,12 +2,10 @@ package redis
 
 import java.util.concurrent.{ThreadLocalRandom, TimeUnit}
 
-import akka.actor.{Actor, ActorRef, ActorSystem, DiagnosticActorLogging, Props}
+import akka.actor._
 import akka.event.Logging
 import akka.util.ByteString
 import redis.api.clusters.{ClusterNode, ClusterSlot}
-import redis.api.connection.Ping
-import redis.commands.Transactions
 import redis.protocol.RedisReply
 import redis.util.CRC16
 
