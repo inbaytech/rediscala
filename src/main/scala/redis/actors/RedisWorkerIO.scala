@@ -27,7 +27,7 @@ abstract class RedisWorkerIO(val address: InetSocketAddress, onConnectStatus: Bo
 
   var readyToWrite = false
 
-  override def preStart() {
+  override def preStart(): Unit = {
     if (tcpWorker != null) {
       tcpWorker ! Close
     }
@@ -42,11 +42,11 @@ abstract class RedisWorkerIO(val address: InetSocketAddress, onConnectStatus: Bo
     preStart()
   }
 
-  override def postStop() {
+  override def postStop(): Unit = {
     log.info("RedisWorkerIO stop")
   }
 
-  def initConnectedBuffer() {
+  def initConnectedBuffer(): Unit = {
     readyToWrite = true
   }
 
@@ -101,7 +101,7 @@ abstract class RedisWorkerIO(val address: InetSocketAddress, onConnectStatus: Bo
     tcpWorker ! Abort
   }
 
-  def onAddressChanged(addr: InetSocketAddress) {
+  def onAddressChanged(addr: InetSocketAddress): Unit = {
     log.info(s"Address change [old=$address, new=$addr]")
     tcpWorker ! ConfirmedClose // close the sending direction of the connection (TCP FIN)
     currAddress = addr
@@ -121,14 +121,14 @@ abstract class RedisWorkerIO(val address: InetSocketAddress, onConnectStatus: Bo
     tcpWorker ! commandFailed.cmd
   }
 
-  def scheduleReconnect() {
+  def scheduleReconnect(): Unit = {
     cleanState()
     log.info(s"Trying to reconnect in $reconnectDuration")
     this.context.system.scheduler.scheduleOnce(reconnectDuration, self, Reconnect)
     become(receive)
   }
 
-  def cleanState() {
+  def cleanState(): Unit = {
     onConnectStatus(false)
     onConnectionClosed()
     readyToWrite = false
@@ -137,21 +137,21 @@ abstract class RedisWorkerIO(val address: InetSocketAddress, onConnectStatus: Bo
 
   def writing: Receive
 
-  def onConnectionClosed()
+  def onConnectionClosed(): Unit
 
-  def onDataReceived(dataByteString: ByteString)
+  def onDataReceived(dataByteString: ByteString): Unit
 
-  def onDataReceivedOnClosingConnection(dataByteString: ByteString)
+  def onDataReceivedOnClosingConnection(dataByteString: ByteString): Unit
 
-  def onClosingConnectionClosed()
+  def onClosingConnectionClosed(): Unit
 
-  def onWriteSent()
+  def onWriteSent(): Unit
 
   def restartConnection() = reconnect()
 
   def onConnectWrite(): ByteString
 
-  def tryInitialWrite() {
+  def tryInitialWrite(): Unit = {
     val data = onConnectWrite()
 
     if (data.nonEmpty) {
@@ -162,7 +162,7 @@ abstract class RedisWorkerIO(val address: InetSocketAddress, onConnectStatus: Bo
     }
   }
 
-  def tryWrite() {
+  def tryWrite(): Unit = {
     if (bufferWrite.length == 0) {
       readyToWrite = true
     } else {
@@ -171,7 +171,7 @@ abstract class RedisWorkerIO(val address: InetSocketAddress, onConnectStatus: Bo
     }
   }
 
-  def write(byteString: ByteString) {
+  def write(byteString: ByteString): Unit = {
     if (readyToWrite) {
       writeWorker(byteString)
     } else {
@@ -183,7 +183,7 @@ abstract class RedisWorkerIO(val address: InetSocketAddress, onConnectStatus: Bo
 
   def reconnectDuration: FiniteDuration = 1 seconds
 
-  private def writeWorker(byteString: ByteString) {
+  private def writeWorker(byteString: ByteString): Unit = {
     onWriteSent()
     tcpWorker ! Write(byteString, WriteAck)
     readyToWrite = false

@@ -6,7 +6,6 @@ import akka.event.Logging
 import redis.api.pubsub.{PMessage, Message}
 import redis.actors.RedisSubscriberActorWithCallback
 import java.net.InetSocketAddress
-import scala.collection.Map
 import scala.concurrent.{Await, Future}
 
 trait SentinelCommands
@@ -98,7 +97,7 @@ case class SentinelClient(server: RedisServer, config: RedisServerConfig,
   /**
     * Disconnect from the server (stop the actors)
     */
-  override def stop() {
+  override def stop(): Unit = {
     system stop redisConnection
     system stop redisPubSubConnection
   }
@@ -127,17 +126,17 @@ abstract class SentinelMonitored(config: RedisConfiguration, system: ActorSystem
   def makeSentinelClientKey(host: String, port: Int) = s"$host:$port"
 
 
-  def internalOnNewSlave(masterName: String, ip: String, port: Int) {
+  def internalOnNewSlave(masterName: String, ip: String, port: Int): Unit = {
     if (master == masterName)
       onNewSlave(ip, port)
   }
 
-  def internalOnSlaveDown(masterName: String, ip: String, port: Int) {
+  def internalOnSlaveDown(masterName: String, ip: String, port: Int): Unit = {
     if (master == masterName)
       onSlaveDown(ip, port)
   }
 
-  def onSwitchMaster(masterName: String, ip: String, port: Int) {
+  def onSwitchMaster(masterName: String, ip: String, port: Int): Unit = {
     if (master == masterName) {
       onMasterChange(ip, port)
       onSlaveDown(ip, port)
@@ -148,7 +147,7 @@ abstract class SentinelMonitored(config: RedisConfiguration, system: ActorSystem
     new SentinelClient(RedisServer(host, port), config.config, onSwitchMaster, onNewSentinel, onSentinelDown, internalOnNewSlave, internalOnSlaveDown, "SMSentinelClient")(system)
   }
 
-  def onNewSentinel(masterName: String, sentinelip: String, sentinelport: Int) {
+  def onNewSentinel(masterName: String, sentinelip: String, sentinelport: Int): Unit = {
     val k = makeSentinelClientKey(sentinelip, sentinelport)
     if (master == masterName && !sentinelClients.contains(k)) {
       sentinelClients.synchronized {
@@ -158,7 +157,7 @@ abstract class SentinelMonitored(config: RedisConfiguration, system: ActorSystem
     }
   }
 
-  def onSentinelDown(masterName: String, sentinelip: String, sentinelport: Int) {
+  def onSentinelDown(masterName: String, sentinelip: String, sentinelport: Int): Unit = {
     val k = makeSentinelClientKey(sentinelip, sentinelport)
     if (master == masterName && sentinelClients.contains(k)) {
       sentinelClients.synchronized {

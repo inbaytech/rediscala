@@ -71,7 +71,7 @@ class RedisWorkerIOSpec extends TestKit(ActorSystem()) with SpecificationLike wi
       probeMock.expectMsg(WriteSent) mustEqual WriteSent
 
       redisWorkerIO ! "PING"
-      probeTcpWorker.expectNoMsg(1 seconds)
+      probeTcpWorker.expectNoMessage(1 seconds)
       probeTcpWorker.send(redisWorkerIO, WriteAck)
       probeTcpWorker.expectMsgType[Write] mustEqual Write(ByteString("PING"), WriteAck)
       probeMock.expectMsg(WriteSent) mustEqual WriteSent
@@ -259,15 +259,15 @@ class RedisWorkerIOMock(probeTcp: ActorRef, address: InetSocketAddress, probeMoc
     case s: String => write(ByteString(s))
   }
 
-  def onConnectionClosed() {
+  def onConnectionClosed(): Unit = {
     probeMock ! OnConnectionClosed
   }
 
-  def onDataReceived(dataByteString: ByteString) {
+  def onDataReceived(dataByteString: ByteString): Unit = {
     probeMock ! dataByteString
   }
 
-  def onWriteSent() {
+  def onWriteSent(): Unit = {
     probeMock ! WriteSent
   }
 

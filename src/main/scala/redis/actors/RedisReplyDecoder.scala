@@ -34,7 +34,7 @@ class RedisReplyDecoder(xmitter: ActorRef, config: RedisServerConfig) extends Ac
     }
   }
 
-  override def postStop() {
+  override def postStop(): Unit = {
     queuePromises.foreach(op => {
       op.completeFailed(InvalidRedisReply)
     })
@@ -50,7 +50,7 @@ class RedisReplyDecoder(xmitter: ActorRef, config: RedisServerConfig) extends Ac
 
   var partiallyDecoded: DecodeResult[Unit] = DecodeResult.unit
 
-  def decodeReplies(dataByteString: ByteString) {
+  def decodeReplies(dataByteString: ByteString): Unit = {
     partiallyDecoded = if (partiallyDecoded.isFullyDecoded) {
       decodeRepliesRecur(partiallyDecoded.rest ++ dataByteString)
     } else {
@@ -75,7 +75,7 @@ class RedisReplyDecoder(xmitter: ActorRef, config: RedisServerConfig) extends Ac
         result
       }
     } else {
-      FullyDecoded(Unit, bs)
+      FullyDecoded((), bs)
     }
   }
 
@@ -101,7 +101,7 @@ object InvalidRedisReply extends RuntimeException("Could not decode the redis re
 trait DecodeReplies {
   var partiallyDecoded: DecodeResult[Unit] = DecodeResult.unit
 
-  def decodeReplies(dataByteString: ByteString) {
+  def decodeReplies(dataByteString: ByteString): Unit = {
     partiallyDecoded = if (partiallyDecoded.isFullyDecoded) {
       decodeRepliesRecur(dataByteString)
     } else {
@@ -124,7 +124,7 @@ trait DecodeReplies {
     }
   }
 
-  def onDecodedReply(reply: RedisReply)
+  def onDecodedReply(reply: RedisReply): Unit
 }
 
 object RedisReplyDecoder {

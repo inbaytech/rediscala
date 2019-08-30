@@ -77,7 +77,7 @@ class RedisPubSubSpec extends RedisStandaloneServer {
       system.scheduler.scheduleOnce(1 second)({
         redis.publish("channel2", ByteString("value"))
       })
-      probeMock.expectNoMsg(3 seconds)
+      probeMock.expectNoMessage(3 seconds)
 
       subscriberActor.underlyingActor.subscribe("channel2")
       system.scheduler.scheduleOnce(1 second)({
@@ -98,7 +98,7 @@ class RedisPubSubSpec extends RedisStandaloneServer {
       system.scheduler.scheduleOnce(2 seconds)({
         redis.publish("pattern2.match", ByteString("value"))
       })
-      probeMock.expectNoMsg(3 seconds)
+      probeMock.expectNoMessage(3 seconds)
 
       subscriberActor.underlyingActor.psubscribe("pattern.*")
       system.scheduler.scheduleOnce(2 seconds)({
@@ -120,7 +120,7 @@ class SubscriberActor(address: InetSocketAddress,
     probeMock ! m
   }
 
-  def onPMessage(pm: PMessage) {
+  def onPMessage(pm: PMessage): Unit = {
     probeMock ! pm
   }
 }

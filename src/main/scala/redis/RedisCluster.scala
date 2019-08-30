@@ -11,7 +11,6 @@ import redis.commands.Transactions
 import redis.protocol.RedisReply
 import redis.util.CRC16
 
-import scala.annotation.tailrec
 import scala.concurrent.duration.Duration
 import scala.concurrent.stm.Ref
 import scala.concurrent.{Await, Future, Promise}
@@ -187,6 +186,7 @@ case class RedisCluster(config: RedisConfiguration, name: String = "RedisCluster
     }.values.toSeq
   }
 
+  Await.result(asyncRefreshClusterSlots(force=true), Duration(10,TimeUnit.SECONDS))
 }
 
 

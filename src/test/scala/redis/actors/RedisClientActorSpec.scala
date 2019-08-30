@@ -8,7 +8,7 @@ import akka.util.ByteString
 import org.specs2.mutable.SpecificationLike
 import redis.api.connection.Ping
 import redis.api.strings.Get
-import redis.{RedisDispatcher, Operation, Redis}
+import redis.{Operation, Redis}
 
 import scala.collection.mutable
 import scala.concurrent.{Await, Promise}
@@ -58,7 +58,7 @@ class RedisClientActorSpec extends TestKit(ActorSystem()) with SpecificationLike
 
       //onConnectWrite
       redisClientActor.underlyingActor.onConnectWrite()
-      awaitAssert(redisClientActor.underlyingActor.queuePromises.result() mustEqual Seq(opConnectPing, opConnectGet, op1, op2))
+      awaitAssert(redisClientActor.underlyingActor.queuePromises.toSeq mustEqual Seq(opConnectPing, opConnectGet, op1, op2))
       awaitAssert(redisClientActor.underlyingActor.queuePromises.length mustEqual 4)
 
       //onWriteSent
@@ -136,11 +136,11 @@ class RedisClientActorMock(probeReplyDecoder: ActorRef, probeMock: ActorRef, get
   extends RedisClientActor(new InetSocketAddress("localhost", 6379), getConnectOperations, onConnectStatus, Redis.dispatcher.name) {
   override def initRepliesDecoder() = probeReplyDecoder
 
-  override def preStart() {
+  override def preStart(): Unit = {
     // disable preStart of RedisWorkerIO
   }
 
-  override def write(byteString: ByteString) {
+  override def write(byteString: ByteString): Unit = {
     probeMock ! WriteMock
   }
 }
