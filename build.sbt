@@ -119,6 +119,7 @@ lazy val root = Project(id = "rediscala",
   base = file(".")
 ).settings(
   standardSettings,
+  inbaytech.settings,
   libraryDependencies ++= rediscalaDependencies
 ).configs(
   BenchTest
