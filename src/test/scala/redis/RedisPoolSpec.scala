@@ -9,7 +9,14 @@ class RedisPoolSpec extends RedisStandaloneServer {
 
   "basic pool test" should {
     "ok" in {
-      val redisPool = RedisClientPool(Seq(RedisServer(  port = port,db = Some(0)), RedisServer(  port = port,db = Some(1)), RedisServer(  port = port,db = Some(3))))
+      val redisPool = RedisClientPool(
+        Seq(
+          RedisServer("localhsot", 6379, db = Some(0)),
+          RedisServer("localhsot", 6379 ,db = Some(1)),
+          RedisServer("localhsot", 6379, db = Some(3))
+        ),
+        RedisServerConfig.default
+      )
       val key = "keyPoolDb0"
       redisPool.set(key, 0)
       val r = for {
@@ -31,9 +38,16 @@ class RedisPoolSpec extends RedisStandaloneServer {
       }
       Await.result(r, timeOut)
     }
-    
+
     "check status" in {
-      val redisPool = RedisClientPool(Seq(RedisServer(  port = port,db = Some(0)), RedisServer(  port = port,db = Some(1)), RedisServer(port = 3333,db = Some(3))))
+      val redisPool = RedisClientPool(
+        Seq(
+          RedisServer("localhsot", 6379, db = Some(0)),
+          RedisServer("localhsot", 6379, db = Some(1)),
+          RedisServer("localhsot", 3333, db = Some(3))
+        ),
+        RedisServerConfig.default
+      )
       val key = "keyPoolDb0"
 
       awaitAssert(redisPool.redisConnectionPool.size mustEqual 2,20 second)

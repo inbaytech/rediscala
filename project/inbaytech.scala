@@ -10,7 +10,7 @@ object inbaytech {
     val props = sys.props
     props.get("sbt.publish.host").orElse(sys.env.get("SBT_PUBLISH_HOST")).flatMap { nexus =>
       props.get("sbt.publish.repo").orElse(sys.env.get("SBT_PUBLISH_REPO")).map { repository =>
-        s"$repository" at s"http://$nexus/content/repositories/$repository"
+        s"$repository" at s"https://$nexus/repository/$repository"
       }
     }
   }

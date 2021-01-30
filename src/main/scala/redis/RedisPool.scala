@@ -13,8 +13,8 @@ import redis.commands.Transactions
 
 import scala.concurrent.duration._
 
-case class RedisServer(host: String = "localhost",
-                       port: Int = 6379,
+case class RedisServer(host: String,
+                       port: Int,
                        password: Option[String] = None,
                        db: Option[Int] = None)
 
@@ -90,7 +90,7 @@ abstract class RedisClientPoolLike(system: ActorSystem, redisDispatcher: RedisDi
     }
   }
 
-  def makeRedisConnection(server: RedisServer, config: RedisServerConfig, defaultActive: Boolean = false) = {
+  def makeRedisConnection(server: RedisServer, config: RedisServerConfig, defaultActive: Boolean = false): (RedisServer, RedisConnection) = {
     val active = Ref(defaultActive)
     (server, RedisConnection(makeRedisClientActor(server, config, active), active))
   }

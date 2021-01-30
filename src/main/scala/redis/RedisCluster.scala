@@ -16,27 +16,46 @@ import scala.concurrent.stm.Ref
 import scala.concurrent.{Await, Future, Promise}
 import scala.util.control.NonFatal
 
-
 case class RedisCluster(config: RedisConfiguration, name: String = "RedisCluster")
                           (implicit _system: ActorSystem,
                            redisDispatcher: RedisDispatcher = Redis.dispatcher
-                          ) extends RedisClientPoolLike(_system, redisDispatcher)  with RedisCommands {
+                          ) extends RedisClientPoolLike(_system, redisDispatcher) with RedisCommands {
 
+  // A cluster node ip_port field is of the form ipaddr:port@cluster_port
+  val ip_port_regex = "([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+):([0-9]+)@([0-9]+)".r
   val log = Logging.getLogger(_system, this)
 
-  val clusterSlotsRef:Ref[Option[Map[ClusterSlot, RedisConnection]]] = Ref(Option.empty[Map[ClusterSlot, RedisConnection]])
+  val clusterSlotsRef: Ref[Option[Map[ClusterSlot, RedisConnection]]] = Ref(Option.empty[Map[ClusterSlot, RedisConnection]])
   val lockClusterSlots = Ref(true)
 
   override val redisServerConnections = {
-    config.topology.nodes.map { server =>
-      makeRedisConnection(server, config.config, defaultActive = true)
-    } toMap
+    config.topology.redis match {
+      case Left(server) =>
+        log.info(s"Retrieving cluster nodes from ${server.host}:${server.port}")
+        val c = RedisClient(server, config.config, "cluster-bootstrapper")
+        val nodes = Await.result(c.clusterNodes(), Duration(10,TimeUnit.SECONDS))
+        c.stop()
+        nodes.map { node =>
+          ip_port_regex.findPrefixMatchOf(node.ip_port) match {
+            case Some(matches) =>
+              val server = RedisServer(matches.group(1), matches.group(2).toInt)
+              log.info(s"Adding cluster node = $server")
+              Some(makeRedisConnection(server, config.config, defaultActive = true))
+            case None =>
+              log.error(s"Retrieved cluster node has malformed ip_port field ${node.ip_port}")
+              Option.empty[(RedisServer, RedisConnection)]
+          }
+        }.filter(_.isDefined).map(_.get).toMap
+      case Right(nodes) =>
+        nodes.map { node =>
+        makeRedisConnection(node, config.config, defaultActive = true)
+      }.toMap
+    }
   }
-  //gamma ray_system.actorOf(RedisClusterMonitor.props(this))
   refreshConnections()
   Await.result(asyncRefreshClusterSlots(force=true), Duration(10,TimeUnit.SECONDS))
 
-  def equalsHostPort(clusterNode:ClusterNode,server:RedisServer) = {
+  def equalsHostPort(clusterNode:ClusterNode,server:RedisServer): Boolean = {
     clusterNode.host == server.host &&  clusterNode.port == server.port
   }
 
@@ -46,7 +65,6 @@ case class RedisCluster(config: RedisConfiguration, name: String = "RedisCluster
       if (active.single.compareAndSet(!status, status)) {
         log.debug(s"REDIS CONNECT STATUS CHANGED for ${server.host}:${server.port}")
         refreshConnections()
-        //_system.eventStream.publish(ServerConnectionStatus(server, status))
       }
 
       clusterSlotsRef.single.get.map { clusterSlots =>

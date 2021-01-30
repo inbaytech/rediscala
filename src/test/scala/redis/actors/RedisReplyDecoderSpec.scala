@@ -5,11 +5,12 @@ import org.specs2.mutable.SpecificationLike
 import akka.util.ByteString
 import redis.api.hashes.Hgetall
 import redis.protocol.MultiBulk
+
 import scala.concurrent.{Await, Promise}
 import scala.collection.mutable
 import java.net.InetSocketAddress
 import com.typesafe.config.ConfigFactory
-import redis.{Redis, Operation}
+import redis.{Operation, Redis, RedisServer, RedisServerConfig}
 import redis.api.connection.Ping
 import akka.testkit._
 
@@ -163,7 +164,7 @@ class RedisReplyDecoderSpec
 }
 
 class RedisClientActorMock2(probeMock: ActorRef)
-  extends RedisClientActor(new InetSocketAddress("localhost", 6379), () => {Seq()}, (status:Boolean) => {()}, Redis.dispatcher.name) {
+  extends RedisClientActor(RedisServer("localhost", 6379), RedisServerConfig.default, () => {Seq()}, (status:Boolean) => {()}, Redis.dispatcher.name) {
   override def preStart(): Unit = {
     // disable preStart of RedisWorkerIO
   }

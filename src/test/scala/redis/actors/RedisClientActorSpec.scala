@@ -1,14 +1,13 @@
 package redis.actors
 
 import java.net.InetSocketAddress
-
 import akka.actor._
 import akka.testkit._
 import akka.util.ByteString
 import org.specs2.mutable.SpecificationLike
 import redis.api.connection.Ping
 import redis.api.strings.Get
-import redis.{Operation, Redis}
+import redis.{Operation, Redis, RedisServer, RedisServerConfig}
 
 import scala.collection.mutable
 import scala.concurrent.{Await, Promise}
@@ -133,7 +132,7 @@ class RedisClientActorSpec extends TestKit(ActorSystem()) with SpecificationLike
 }
 
 class RedisClientActorMock(probeReplyDecoder: ActorRef, probeMock: ActorRef, getConnectOperations: () => Seq[Operation[_, _]], onConnectStatus: Boolean => Unit )
-  extends RedisClientActor(new InetSocketAddress("localhost", 6379), getConnectOperations, onConnectStatus, Redis.dispatcher.name) {
+  extends RedisClientActor(RedisServer("localhost", 6379), RedisServerConfig.default, getConnectOperations, onConnectStatus, Redis.dispatcher.name) {
   override def initRepliesDecoder() = probeReplyDecoder
 
   override def preStart(): Unit = {

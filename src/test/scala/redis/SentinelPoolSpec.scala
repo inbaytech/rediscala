@@ -12,7 +12,8 @@ class SentinelMutablePoolSpec extends RedisSentinelClients("SentinelMutablePoolS
 
   override def setup(): Unit = {
     super.setup()
-    redisPool = RedisClientMutablePool(Seq(RedisServer(redisHost, slavePort1)),masterName)
+    val config = RedisConfiguration(RedisTopology(Left(RedisServer(redisHost, slavePort1))), RedisServerConfig.default)
+    redisPool = RedisClientMutablePool(config, masterName)
   }
 
   "mutable pool" should {
@@ -20,8 +21,8 @@ class SentinelMutablePoolSpec extends RedisSentinelClients("SentinelMutablePoolS
       Thread.sleep(1000)
       redisPool.redisConnectionPool.size mustEqual 1
 
-      redisPool.addServer(RedisServer(redisHost,slavePort2))
-      redisPool.addServer(RedisServer(redisHost,slavePort2))
+      redisPool.addServer(RedisServer(redisHost,slavePort2), RedisServerConfig.default)
+      redisPool.addServer(RedisServer(redisHost,slavePort2), RedisServerConfig.default)
       Thread.sleep(5000)
       redisPool.redisConnectionPool.size mustEqual 2
 
@@ -58,7 +59,7 @@ sequential
 
   lazy val redisMasterSlavesPool =
       SentinelMonitoredRedisClientMasterSlaves(
-        RedisClientConfig(Right(sentinelPorts.map(RedisServer(redisHost, _))), None),
+        RedisConfiguration(sentinelPorts.map(RedisServer(redisHost, _))),
         masterName
       )
   "sentinel slave pool" should {
